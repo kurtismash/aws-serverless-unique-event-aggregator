@@ -24,10 +24,6 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 
 		const aggregationTable = new Table(this, `${id}-aggregation-table`, {
 			partitionKey: {
-				name: "batchId",
-				type: AttributeType.STRING,
-			},
-			sortKey: {
 				name: "eventId",
 				type: AttributeType.STRING,
 			},
@@ -35,10 +31,10 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 			billingMode: BillingMode.PAY_PER_REQUEST,
 			removalPolicy: cdk.RemovalPolicy.DESTROY,
 		});
-		// aggregationTable.addGlobalSecondaryIndex({
-		// 	indexName: "batchId-index",
-		// 	partitionKey: { name: "batchId", type: AttributeType.STRING },
-		// });
+		aggregationTable.addGlobalSecondaryIndex({
+			indexName: "batchId-index",
+			partitionKey: { name: "batchId", type: AttributeType.STRING },
+		});
 
 		const aggregatorFunction = new Function(
 			this,
