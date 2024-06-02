@@ -3,7 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 
-const DDB_TABLE_NAME = process.env.DDB_TABLE_NAME;
+const DDB_LOCK_TABLE = process.env.DDB_LOCK_TABLE;
 const OUTPUT_SQS_URL = process.env.OUTPUT_SQS_URL;
 
 const sqsClient = new SQSClient();
@@ -15,40 +15,43 @@ export const handler = async (event, context) => {
 	let filteredMessageCount = 0;
 	const batchId = v4();
 
-	// Send a message to the batch queue with a batch identifier
-	// Do this first to handle the batch even if this Lambda fails
+	// Send a message to the batch-queue with a batch identifier.
+	// Do this first to handle the batch even if this Lambda fails.
 	const sqsCommand = new SendMessageCommand({
 		QueueUrl: OUTPUT_SQS_URL,
-		DelaySeconds: context.getRemainingTimeInMillis() / 1000 + 60,
+		DelaySeconds: context.getRemainingTimeInMillis() / 1000,
 		MessageBody: JSON.stringify({ batchId }),
 	});
 	await sqsClient.send(sqsCommand);
 
-	// Attempt to add each message to DynamoDB
+	// Attempt to add each message to DynamoDB.
 	const promises = event.Records.map(async (i) => {
 		const { identifier } = JSON.parse(i.body);
 		const ddbCommand = new PutCommand({
-			TableName: DDB_TABLE_NAME,
+			TableName: DDB_LOCK_TABLE,
 			Item: {
-				eventId: identifier,
+				messageId: identifier,
 				batchId,
 				message: i.body,
 			},
-			ConditionExpression: "attribute_not_exists(eventId)",
+			ConditionExpression: "attribute_not_exists(messageId)",
 		});
 		try {
 			await docClient.send(ddbCommand);
 			filteredMessageCount += 1;
 		} catch (e) {
-			// TODO: Passthrough any error but conditional not met
-			// TODO: Return successes and failures so Lambda can delete successfuls
-			return;
+			return { success: false, sqsMessageId: i.messageId };
 		}
+		return { success: true };
 	});
 
-	await Promise.all(promises);
-
-	console.log(
-		`${rawMessageCount} -> ${filteredMessageCount} (Batch: ${batchId})`
-	);
+	const results = await Promise.all(promises);
+	const successCount = results.filter((i) => i.success).length;
+	const failures = results.filter((i) => !i.success);
+	console.log(`${rawMessageCount} -> ${successCount} (Batch: ${batchId})`);
+	return {
+		batchItemFailures: failures.map((i) => ({
+			itemIdentifier: i.sqsMessageId,
+		})),
+	};
 };
