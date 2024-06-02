@@ -22,7 +22,7 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 			queueName: `${id}-batch-queue`,
 		});
 
-		const aggregationTable = new Table(this, `${id}-lock-table`, {
+		const lockTable = new Table(this, `${id}-lock-table`, {
 			partitionKey: {
 				name: "messageId",
 				type: AttributeType.STRING,
@@ -32,7 +32,7 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 			removalPolicy: cdk.RemovalPolicy.DESTROY,
 		});
 		const batchGsiName = "batchId-index";
-		aggregationTable.addGlobalSecondaryIndex({
+		lockTable.addGlobalSecondaryIndex({
 			indexName: batchGsiName,
 			partitionKey: { name: "batchId", type: AttributeType.STRING },
 		});
@@ -40,12 +40,10 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 		const aggregatorFunction = new Function(this, `${id}-aggregator-lambda`, {
 			runtime: Runtime.NODEJS_18_X,
 			handler: "src/index.handler",
-			code: Code.fromAsset(
-				path.join(__dirname, "../../src/aggregator-lambda/")
-			),
+			code: Code.fromAsset(path.join(__dirname, "../../src/aggregator-lambda/")),
 			functionName: `${id}-aggregator-lambda`,
 			environment: {
-				DDB_LOCK_TABLE: aggregationTable.tableName,
+				DDB_LOCK_TABLE: lockTable.tableName,
 				OUTPUT_SQS_URL: batchQueue.queueUrl,
 			},
 			memorySize: 1769,
@@ -60,30 +58,24 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 			})
 		);
 		batchQueue.grantSendMessages(aggregatorFunction);
-		aggregationTable.grantReadWriteData(aggregatorFunction);
+		lockTable.grantReadWriteData(aggregatorFunction);
 
-		const batchProcessorFunction = new Function(
-			this,
-			`${id}-batch-processor-lambda`,
-			{
-				runtime: Runtime.NODEJS_18_X,
-				handler: "src/index.handler",
-				code: Code.fromAsset(
-					path.join(__dirname, "/../../src/batch-processor-lambda/")
-				),
-				functionName: `${id}-batch-processor-lambda`,
-				environment: {
-					DDB_LOCK_TABLE: aggregationTable.tableName,
-					DDB_BATCH_INDEX: batchGsiName,
-				},
-				timeout: cdk.Duration.minutes(5),
-			}
-		);
+		const batchProcessorFunction = new Function(this, `${id}-batch-processor-lambda`, {
+			runtime: Runtime.NODEJS_18_X,
+			handler: "src/index.handler",
+			code: Code.fromAsset(path.join(__dirname, "/../../src/batch-processor-lambda/")),
+			functionName: `${id}-batch-processor-lambda`,
+			environment: {
+				DDB_LOCK_TABLE: lockTable.tableName,
+				DDB_BATCH_INDEX: batchGsiName,
+			},
+			timeout: cdk.Duration.minutes(5),
+		});
 		batchProcessorFunction.addEventSource(
 			new SqsEventSource(batchQueue, {
 				batchSize: 1,
 			})
 		);
-		aggregationTable.grantReadWriteData(batchProcessorFunction);
+		lockTable.grantReadWriteData(batchProcessorFunction);
 	}
 }
