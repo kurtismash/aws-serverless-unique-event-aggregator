@@ -5,8 +5,8 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 
 const DDB_LOCK_TABLE = process.env.DDB_LOCK_TABLE;
 const OUTPUT_SQS_URL = process.env.OUTPUT_SQS_URL;
-const MAX_SECONDARY_BATCHING_WINDOW = process.env.MAX_SECONDARY_BATCHING_WINDOW || 60;
-const MAX_BATCH_SIZE = process.env.MAX_BATCH_SIZE || 100;
+const MAX_SECONDARY_BATCHING_WINDOW = process.env.MAX_SECONDARY_BATCHING_WINDOW || 300;
+const MAX_BATCH_SIZE = process.env.MAX_BATCH_SIZE || 50000;
 
 const BATCH_CACHE = {};
 
@@ -29,6 +29,7 @@ const startNewBatch = async (sourceId, lambdaTimeoutTime) => {
 		MessageBody: JSON.stringify({ batchId }),
 	});
 	await sqsClient.send(sqsCommand);
+	console.log(`STARTING BATCH ${batchId}`);
 	return batchId;
 };
 
