@@ -11,8 +11,9 @@ The aggregation uses Lambda's [built-in batching](https://aws.amazon.com/about-a
 The application is written and deployed using AWS CDK. From the root of this repository, with AWS CDK installed, run the following to deploy to your AWS environment.
 
 ```sh
-npm i src/aggregator-lambda/
-(cd infrastructure/ && cdk deploy --all)
+(cd src/aggregator-lambda && npm i)
+(cd src/batch-processor-lambda && npm i)
+(cd infrastructure/ && npm i && cdk deploy --all)
 ```
 
 ## Testing
