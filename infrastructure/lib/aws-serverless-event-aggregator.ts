@@ -69,6 +69,7 @@ export class AwsServerlessEventAggregatorStack extends cdk.Stack {
 				DDB_LOCK_TABLE: lockTable.tableName,
 				DDB_BATCH_INDEX: batchGsiName,
 			},
+			memorySize: 1769,
 			timeout: cdk.Duration.minutes(5),
 		});
 		batchProcessorFunction.addEventSource(
